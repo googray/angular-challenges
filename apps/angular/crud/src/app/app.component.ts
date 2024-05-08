@@ -1,51 +1,64 @@
 import { CommonModule } from '@angular/common';
-import { HttpClient } from '@angular/common/http';
-import { Component, OnInit } from '@angular/core';
-import { randText } from '@ngneat/falso';
+import { Component, OnInit, inject } from '@angular/core';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { ITodo } from '../interface/interface';
+import { ApiService } from '../services/api-service';
+import { CrudStore } from '../stores/crud.store';
+import { TodoItemComponent } from './todo-item.component';
 
 @Component({
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, MatProgressSpinnerModule, TodoItemComponent],
   selector: 'app-root',
   template: `
-    <div *ngFor="let todo of todos">
-      {{ todo.title }}
-      <button (click)="update(todo)">Update</button>
+    <div *ngIf="isAppProcessing$ | async" class="indicator">
+      <mat-spinner></mat-spinner>
     </div>
+    @for (todo of todos$ | async; track todo.id) {
+      <app-todo-item
+        [title]="todo.title"
+        [isProcessing]="isTodoItemProcessing(todo.id)"
+        (update)="update(todo)"
+        (delete)="delete(todo.id)"></app-todo-item>
+    }
   `,
-  styles: [],
+  styles: [
+    `
+      .indicator {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        display: grid;
+        place-items: center;
+        background: rgba(100, 100, 100, 0.5);
+      }
+    `,
+  ],
+  host: {
+    styles: 'position: relative',
+  },
+  providers: [CrudStore],
 })
 export class AppComponent implements OnInit {
-  todos!: any[];
+  private apiService = inject(ApiService);
+  private crudStore = inject(CrudStore);
 
-  constructor(private http: HttpClient) {}
+  todos$ = this.crudStore.todos$;
+  isAppProcessing$ = this.crudStore.isAppProcessing$;
 
   ngOnInit(): void {
-    this.http
-      .get<any[]>('https://jsonplaceholder.typicode.com/todos')
-      .subscribe((todos) => {
-        this.todos = todos;
-      });
+    this.crudStore.getTodoItems();
   }
 
-  update(todo: any) {
-    this.http
-      .put<any>(
-        `https://jsonplaceholder.typicode.com/todos/${todo.id}`,
-        JSON.stringify({
-          todo: todo.id,
-          title: randText(),
-          body: todo.body,
-          userId: todo.userId,
-        }),
-        {
-          headers: {
-            'Content-type': 'application/json; charset=UTF-8',
-          },
-        },
-      )
-      .subscribe((todoUpdated: any) => {
-        this.todos[todoUpdated.id - 1] = todoUpdated;
-      });
+  update(todo: ITodo) {
+    this.crudStore.updateTodoItem(todo);
+  }
+
+  delete(id: number) {
+    this.crudStore.deleteTodoItem(id);
+  }
+
+  isTodoItemProcessing(id: number): boolean {
+    return this.crudStore.isTodoItemProcessing(id);
   }
 }
